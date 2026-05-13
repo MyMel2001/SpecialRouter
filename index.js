@@ -38,6 +38,24 @@ function getSpecialists() {
 }
 
 // Router Endpoint
+app.get('/health', (req, res) => res.send('OK'));
+
+// Models Endpoint (OpenAI compatibility)
+app.get('/v1/models', (req, res) => {
+    const modelName = process.env.ROUTER_VIRTUAL_MODEL_NAME || 'specialrouter';
+    res.json({
+        object: 'list',
+        data: [
+            {
+                id: modelName,
+                object: 'model',
+                created: Math.floor(Date.now() / 1000),
+                owned_by: 'special-router'
+            }
+        ]
+    });
+});
+
 app.post('/v1/chat/completions', async (req, res) => {
     const { model, messages, stream } = req.body;
     const authHeader = req.headers.authorization;
