@@ -7,6 +7,7 @@ const bodyParser = require('body-parser');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const VIRTUAL_MODEL_NAME = process.env.ROUTER_VIRTUAL_MODEL_NAME || 'specialrouter';
 
 // Middleware
 app.use(cors());
@@ -42,12 +43,11 @@ app.get('/health', (req, res) => res.send('OK'));
 
 // Models Endpoint (OpenAI compatibility)
 app.get('/v1/models', (req, res) => {
-    const modelName = process.env.ROUTER_VIRTUAL_MODEL_NAME || 'specialrouter';
     res.json({
         object: 'list',
         data: [
             {
-                id: modelName,
+                id: VIRTUAL_MODEL_NAME,
                 object: 'model',
                 created: Math.floor(Date.now() / 1000),
                 owned_by: 'special-router'
@@ -60,17 +60,8 @@ app.post('/v1/chat/completions', async (req, res) => {
     const { model, messages, stream } = req.body;
     const authHeader = req.headers.authorization;
 
-    // 1. Validate Virtual Model Name
-    if (model !== process.env.ROUTER_VIRTUAL_MODEL_NAME) {
-        return res.status(400).json({
-            error: {
-                message: `Invalid model name. Expected ${process.env.ROUTER_VIRTUAL_MODEL_NAME}`,
-                type: 'invalid_request_error',
-                param: 'model',
-                code: 'invalid_model'
-            }
-        });
-    }
+    // 1. Optional: Log model name (we accept any model name as requested)
+    console.log(`Incoming request for model: ${model}`);
 
     // 2. Validate API Key (if configured)
     if (process.env.ROUTER_API_KEY) {
