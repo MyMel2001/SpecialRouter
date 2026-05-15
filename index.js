@@ -155,22 +155,18 @@ ID (ONLY):`
             timeout: 30000 
         });
 
-        let rawChoice = chooserResponse.data.choices[0].message.content.trim();
+        const content = chooserResponse.data.choices[0].message.content || '';
+        const reasoning = chooserResponse.data.choices[0].message.reasoning || '';
         
-        // Fallback for models that put the ID in reasoning or reasoning field
-        if (!rawChoice && chooserResponse.data.choices[0].message.reasoning) {
-            console.log('Content empty, checking reasoning field...');
-            const reasoning = chooserResponse.data.choices[0].message.reasoning;
-            const match = reasoning.match(/SPECIALIST_\d+|FALLBACK/);
-            if (match) {
-                rawChoice = match[0];
-            }
-        }
+        // Use Regex to find the ID (handles markdown like **SPECIALIST_1**, SPECIALIST_1., etc.)
+        const combined = (content + ' ' + reasoning);
+        const match = combined.match(/SPECIALIST_\d+|FALLBACK/);
+        const rawChoice = match ? match[0] : '';
 
-        console.log(`Chooser result: "${rawChoice}"`);
+        console.log(`Chooser result: "${rawChoice}" (Extracted from "${content.substring(0, 50)}...")`);
         
         if (!rawChoice) {
-            console.warn('Chooser model returned an empty response. Full response body:', JSON.stringify(chooserResponse.data));
+            console.warn('Chooser model failed to output a valid ID. Full response body:', JSON.stringify(chooserResponse.data));
         }
 
         // Validate choice
@@ -179,7 +175,7 @@ ID (ONLY):`
         } else if (rawChoice === 'FALLBACK') {
             chosenSpecialistId = 'FALLBACK';
         } else {
-            console.warn(`Chooser model returned an unknown ID: "${rawChoice}". Falling back.`);
+            console.warn(`Chooser model returned an unknown or empty ID: "${rawChoice}". Falling back.`);
             chosenSpecialistId = 'FALLBACK';
         }
     } catch (error) {
