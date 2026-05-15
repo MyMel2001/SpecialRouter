@@ -138,7 +138,7 @@ ONLY output the ID (e.g., SPECIALIST_1 or FALLBACK). Do not include any other te
                 }
             ],
             temperature: 0,
-            max_tokens: 10
+            max_tokens: 50
         };
 
         const chooserEndpoint = sanitize(process.env.CHOOSER_MODEL_ENDPOINT);
@@ -155,9 +155,15 @@ ONLY output the ID (e.g., SPECIALIST_1 or FALLBACK). Do not include any other te
         const rawChoice = chooserResponse.data.choices[0].message.content.trim();
         console.log(`Chooser result: "${rawChoice}"`);
         
+        if (!rawChoice) {
+            console.warn('Chooser model returned an empty response. Full response body:', JSON.stringify(chooserResponse.data));
+        }
+
         // Validate choice
         if (specialists.some(s => s.id === rawChoice)) {
             chosenSpecialistId = rawChoice;
+        } else if (rawChoice !== 'FALLBACK') {
+            console.warn(`Chooser model returned an unknown ID: "${rawChoice}". Falling back.`);
         }
     } catch (error) {
         console.error('Error calling chooser model:', error.message);
