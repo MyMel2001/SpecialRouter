@@ -63,6 +63,18 @@ app.post('/v1/chat/completions', async (req, res) => {
     // 1. Optional: Log model name (we accept any model name as requested)
     console.log(`Incoming request for model: ${model}`);
 
+    // Validate messages
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+        return res.status(400).json({
+            error: {
+                message: "[] is too short - 'messages'",
+                type: 'invalid_request_error',
+                param: 'messages',
+                code: null
+            }
+        });
+    }
+
     // 2. Validate API Key (if configured)
     if (process.env.ROUTER_API_KEY) {
         const providedKey = authHeader ? authHeader.replace('Bearer ', '') : '';
