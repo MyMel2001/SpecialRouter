@@ -15,6 +15,12 @@ app.use(morgan('dev'));
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 
+// Helper to sanitize environment variables
+function sanitize(val) {
+    if (typeof val !== 'string') return val;
+    return val.trim().replace(/^["']|["']$/g, '');
+}
+
 // Helper to parse specialists from .env
 function getSpecialists() {
     const specialists = {};
@@ -30,7 +36,7 @@ function getSpecialists() {
                 if (!specialists[id]) {
                     specialists[id] = { id };
                 }
-                specialists[id][field] = process.env[key];
+                specialists[id][field] = sanitize(process.env[key]);
             }
         }
     });
@@ -135,15 +141,19 @@ ONLY output the ID (e.g., SPECIALIST_1 or FALLBACK). Do not include any other te
             max_tokens: 10
         };
 
-        const chooserResponse = await axios.post(process.env.CHOOSER_MODEL_ENDPOINT, chooserPayload, {
+        const chooserEndpoint = sanitize(process.env.CHOOSER_MODEL_ENDPOINT);
+        const chooserApiKey = sanitize(process.env.CHOOSER_MODEL_API_KEY);
+        
+        const chooserResponse = await axios.post(chooserEndpoint, chooserPayload, {
             headers: {
-                'Authorization': `Bearer ${process.env.CHOOSER_MODEL_API_KEY}`,
+                'Authorization': `Bearer ${chooserApiKey}`,
                 'Content-Type': 'application/json'
             },
             timeout: 30000 
         });
 
         const rawChoice = chooserResponse.data.choices[0].message.content.trim();
+        console.log(`Chooser result: "${rawChoice}"`);
         
         // Validate choice
         if (specialists.some(s => s.id === rawChoice)) {
@@ -157,9 +167,9 @@ ONLY output the ID (e.g., SPECIALIST_1 or FALLBACK). Do not include any other te
     let selectedConfig;
     if (chosenSpecialistId === 'FALLBACK') {
         selectedConfig = {
-            model_endpoint: process.env.FALLBACK_MODEL_ENDPOINT,
-            model_name: process.env.FALLBACK_MODEL_NAME,
-            model_api_key: process.env.FALLBACK_MODEL_API_KEY
+            model_endpoint: sanitize(process.env.FALLBACK_MODEL_ENDPOINT),
+            model_name: sanitize(process.env.FALLBACK_MODEL_NAME),
+            model_api_key: sanitize(process.env.FALLBACK_MODEL_API_KEY)
         };
     } else {
         selectedConfig = specialists.find(s => s.id === chosenSpecialistId);
@@ -178,6 +188,8 @@ ONLY output the ID (e.g., SPECIALIST_1 or FALLBACK). Do not include any other te
                 : `Specialist ${chosenSpecialistId} is missing model_endpoint`;
             throw new Error(errorMsg);
         }
+
+        console.log(`Forwarding to ${chosenSpecialistId}: ${selectedConfig.model_endpoint} (Model: ${selectedConfig.model_name})`);
 
         const response = await axios({
             method: 'post',
@@ -227,10 +239,13 @@ const server = app.listen(PORT, () => {
     console.log(`Detected ${specialists.length} valid specialists:`);
     specialists.forEach(s => console.log(` - ${s.id}: ${s.topic} (${s.model_name} at ${s.model_endpoint})`));
     
-    if (!process.env.CHOOSER_MODEL_ENDPOINT) {
+    const chooserEndpoint = sanitize(process.env.CHOOSER_MODEL_ENDPOINT);
+    const fallbackEndpoint = sanitize(process.env.FALLBACK_MODEL_ENDPOINT);
+
+    if (!chooserEndpoint) {
         console.error('CRITICAL: CHOOSER_MODEL_ENDPOINT is not defined!');
     }
-    if (!process.env.FALLBACK_MODEL_ENDPOINT) {
+    if (!fallbackEndpoint) {
         console.warn('Warning: FALLBACK_MODEL_ENDPOINT is not defined. Fallback will fail with "Invalid URL".');
     }
 });
