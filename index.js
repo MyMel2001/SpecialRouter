@@ -155,15 +155,15 @@ ID (ONLY):`
             timeout: 30000 
         });
 
-        const content = chooserResponse.data.choices[0].message.content || '';
+        const chooserContent = chooserResponse.data.choices[0].message.content || '';
         const reasoning = chooserResponse.data.choices[0].message.reasoning || '';
         
         // Use Regex to find the ID (handles markdown like **SPECIALIST_1**, SPECIALIST_1., etc.)
-        const combined = (content + ' ' + reasoning);
+        const combined = (chooserContent + ' ' + reasoning);
         const match = combined.match(/SPECIALIST_\d+|FALLBACK/);
         const rawChoice = match ? match[0] : '';
 
-        console.log(`Chooser result: "${rawChoice}" (Extracted from "${content.substring(0, 50)}...")`);
+        console.log(`Chooser result: "${rawChoice}" (Extracted from "${chooserContent.substring(0, 50)}...")`);
         
         if (!rawChoice) {
             console.warn('Chooser model failed to output a valid ID. Full response body:', JSON.stringify(chooserResponse.data));
