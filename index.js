@@ -35,7 +35,19 @@ function getSpecialists() {
         }
     });
     
-    return Object.values(specialists).filter(s => s.topic && s.model_endpoint && s.model_name);
+    const specialistArray = Object.values(specialists);
+    const filtered = specialistArray.filter(s => s.topic && s.model_endpoint && s.model_name);
+    
+    if (specialistArray.length > 0 && filtered.length < specialistArray.length) {
+        console.warn(`Warning: Some specialists were filtered out due to missing required fields (topic, model_endpoint, or model_name).`);
+        specialistArray.forEach(s => {
+            if (!s.topic || !s.model_endpoint || !s.model_name) {
+                console.warn(` - Specialist ${s.id} is missing: ${[!s.topic && 'topic', !s.model_endpoint && 'model_endpoint', !s.model_name && 'model_name'].filter(Boolean).join(', ')}`);
+            }
+        });
+    }
+
+    return filtered;
 }
 
 // Router Endpoint
@@ -160,12 +172,19 @@ ONLY output the ID (e.g., SPECIALIST_1 or FALLBACK). Do not include any other te
             model: selectedConfig.model_name
         };
 
+        if (!selectedConfig || !selectedConfig.model_endpoint) {
+            const errorMsg = chosenSpecialistId === 'FALLBACK' 
+                ? 'Fallback model is not configured (missing FALLBACK_MODEL_ENDPOINT)' 
+                : `Specialist ${chosenSpecialistId} is missing model_endpoint`;
+            throw new Error(errorMsg);
+        }
+
         const response = await axios({
             method: 'post',
             url: selectedConfig.model_endpoint,
             data: forwardPayload,
             headers: {
-                'Authorization': `Bearer ${selectedConfig.model_api_key}`,
+                'Authorization': `Bearer ${selectedConfig.model_api_key || ''}`,
                 'Content-Type': 'application/json'
             },
             responseType: stream ? 'stream' : 'json',
@@ -202,6 +221,18 @@ ONLY output the ID (e.g., SPECIALIST_1 or FALLBACK). Do not include any other te
 
 const server = app.listen(PORT, () => {
     console.log(`AI Specialist Router running on port ${PORT}`);
+    
+    // Diagnostics
+    const specialists = getSpecialists();
+    console.log(`Detected ${specialists.length} valid specialists:`);
+    specialists.forEach(s => console.log(` - ${s.id}: ${s.topic} (${s.model_name} at ${s.model_endpoint})`));
+    
+    if (!process.env.CHOOSER_MODEL_ENDPOINT) {
+        console.error('CRITICAL: CHOOSER_MODEL_ENDPOINT is not defined!');
+    }
+    if (!process.env.FALLBACK_MODEL_ENDPOINT) {
+        console.warn('Warning: FALLBACK_MODEL_ENDPOINT is not defined. Fallback will fail with "Invalid URL".');
+    }
 });
 
 server.timeout = 0;
