@@ -125,20 +125,23 @@ app.post('/v1/chat/completions', async (req, res) => {
             messages: [
                 {
                     role: 'system',
-                    content: `You are a specialist router. Your job is to choose the best specialist for the user's prompt.
+                    content: `You are a specialist router. Output ONLY the ID of the best specialist.
+DO NOT THINK. DO NOT REASON. DO NOT EXPLAIN. ONLY OUTPUT THE ID.
 Available Specialists:
 ${specialistListStr}
 
-If none of the specialists are a good fit, output "FALLBACK".
-ONLY output the ID (e.g., SPECIALIST_1 or FALLBACK). Do not include any other text.`
+If none fit, output "FALLBACK".`
                 },
                 {
                     role: 'user',
-                    content: `Which specialist is best for this prompt? Prompt: ${content.substring(0, 2000)}`
+                    content: `Which specialist is best for this prompt? Output ONLY the ID.
+Prompt: ${content.substring(0, 2000)}
+
+ID (ONLY):`
                 }
             ],
             temperature: 0,
-            max_tokens: 50
+            max_tokens: 200
         };
 
         const chooserEndpoint = sanitize(process.env.CHOOSER_MODEL_ENDPOINT);
@@ -152,7 +155,18 @@ ONLY output the ID (e.g., SPECIALIST_1 or FALLBACK). Do not include any other te
             timeout: 30000 
         });
 
-        const rawChoice = chooserResponse.data.choices[0].message.content.trim();
+        let rawChoice = chooserResponse.data.choices[0].message.content.trim();
+        
+        // Fallback for models that put the ID in reasoning or reasoning field
+        if (!rawChoice && chooserResponse.data.choices[0].message.reasoning) {
+            console.log('Content empty, checking reasoning field...');
+            const reasoning = chooserResponse.data.choices[0].message.reasoning;
+            const match = reasoning.match(/SPECIALIST_\d+|FALLBACK/);
+            if (match) {
+                rawChoice = match[0];
+            }
+        }
+
         console.log(`Chooser result: "${rawChoice}"`);
         
         if (!rawChoice) {
@@ -162,8 +176,11 @@ ONLY output the ID (e.g., SPECIALIST_1 or FALLBACK). Do not include any other te
         // Validate choice
         if (specialists.some(s => s.id === rawChoice)) {
             chosenSpecialistId = rawChoice;
-        } else if (rawChoice !== 'FALLBACK') {
+        } else if (rawChoice === 'FALLBACK') {
+            chosenSpecialistId = 'FALLBACK';
+        } else {
             console.warn(`Chooser model returned an unknown ID: "${rawChoice}". Falling back.`);
+            chosenSpecialistId = 'FALLBACK';
         }
     } catch (error) {
         console.error('Error calling chooser model:', error.message);
