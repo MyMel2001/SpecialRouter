@@ -141,7 +141,7 @@ ID (ONLY):`
                 }
             ],
             temperature: 0,
-            max_tokens: 2000
+            max_tokens: 200
         };
 
         const chooserEndpoint = sanitize(process.env.CHOOSER_MODEL_ENDPOINT);
