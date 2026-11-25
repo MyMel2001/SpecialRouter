@@ -152,7 +152,7 @@ ID (ONLY):`
                 'Authorization': `Bearer ${chooserApiKey}`,
                 'Content-Type': 'application/json'
             },
-            timeout: 30000 
+            timeout: 0 
         });
 
         const chooserContent = chooserResponse.data.choices[0].message.content || '';
