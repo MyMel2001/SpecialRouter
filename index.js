@@ -109,64 +109,55 @@ app.post('/v1/chat/completions', async (req, res) => {
     }
 
     const specialists = getSpecialists();
-    const specialistListStr = specialists.map(s => `${s.id}: ${s.topic}`).join('\n');
-
-    // 3. Activate Chooser Model
+    // 3. Activate Chooser Model (jev-compatible decider)
     let chosenSpecialistId = 'FALLBACK';
     try {
-        // Extract the last user message or the whole context for the chooser
+        // Extract the last user message to use as the query for the decider
         const lastMessage = messages[messages.length - 1];
-        const content = typeof lastMessage.content === 'string' 
-            ? lastMessage.content 
+        const content = typeof lastMessage.content === 'string'
+            ? lastMessage.content
             : JSON.stringify(lastMessage.content);
 
+        // Build the criteria: each specialist ID mapped to its topic description
+        const criteria = {};
+        specialists.forEach(s => {
+            criteria[s.id] = s.topic;
+        });
+
         const chooserPayload = {
-            model: process.env.CHOOSER_MODEL_NAME,
-            messages: [
-                {
-                    role: 'system',
-                    content: `You are a specialist router. Output ONLY the ID of the best specialist.
-DO NOT THINK. DO NOT REASON. DO NOT EXPLAIN. ONLY OUTPUT THE ID.
-Available Specialists:
-${specialistListStr}
-
-If none fit, output "FALLBACK".`
-                },
-                {
-                    role: 'user',
-                    content: `Which specialist is best for this prompt? Output ONLY the ID.
-Prompt: ${content.substring(0, 2000)}
-
-ID (ONLY):`
+            model: sanitize(process.env.CHOOSER_MODEL_NAME),
+            state: {
+                query: content,
+                task: 'Select the model best suited to respond to this query.'
+            },
+            questions: {
+                best_model: {
+                    type: 'choice',
+                    instructions: 'Which best describes the model that would be best for this query?',
+                    criteria: criteria
                 }
-            ],
-            temperature: 0,
-            max_tokens: 200
+            }
         };
 
         const chooserEndpoint = sanitize(process.env.CHOOSER_MODEL_ENDPOINT);
         const chooserApiKey = sanitize(process.env.CHOOSER_MODEL_API_KEY);
-        
+
         const chooserResponse = await axios.post(chooserEndpoint, chooserPayload, {
             headers: {
                 'Authorization': `Bearer ${chooserApiKey}`,
                 'Content-Type': 'application/json'
             },
-            timeout: 0 
+            timeout: 0
         });
 
-        const chooserContent = chooserResponse.data.choices[0].message.content || '';
-        const reasoning = chooserResponse.data.choices[0].message.reasoning || '';
-        
-        // Use Regex to find the ID (handles markdown like **SPECIALIST_1**, SPECIALIST_1., etc.)
-        const combined = (chooserContent + ' ' + reasoning);
-        const match = combined.match(/SPECIALIST_\d+|FALLBACK/);
-        const rawChoice = match ? match[0] : '';
+        // Extract the chosen specialist ID from the decider's answers
+        const answer = chooserResponse.data.answers && chooserResponse.data.answers.best_model;
+        const rawChoice = answer ? answer.choice : '';
 
-        console.log(`Chooser result: "${rawChoice}" (Extracted from "${chooserContent.substring(0, 50)}...")`);
-        
+        console.log(`Chooser result: "${rawChoice}"`);
+
         if (!rawChoice) {
-            console.warn('Chooser model failed to output a valid ID. Full response body:', JSON.stringify(chooserResponse.data));
+            console.warn('Chooser model failed to return a choice. Full response body:', JSON.stringify(chooserResponse.data));
         }
 
         // Validate choice
