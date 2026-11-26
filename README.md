@@ -5,7 +5,7 @@ A high-performance Node.js/Express-based intelligent router for LLM requests. Th
 ## How it Works
 
 1.  **Incoming Request**: The router receives an OpenAI-compatible chat completion request (including multimodal/image data).
-2.  **Specialist Selection**: A dedicated "Chooser" model (a jev-compatible decider endpoint) analyzes the prompt and returns the best-matching specialist as a structured choice, comparing the query against each specialist's topic description.
+2.  **Specialist Selection**: A dedicated "Chooser" model (a jev-compatible decider endpoint) analyzes the current turn using the conversation history as context, and returns the best-matching specialist as a structured choice, comparing the query against each specialist's topic description.
 3.  **Dynamic Routing**: The request is forwarded to the selected specialist model, or a fallback model if no match is found.
 4.  **Streaming Support**: Full support for Server-Sent Events (SSE) streaming and large payloads.
 
@@ -48,4 +48,4 @@ Point your AI client to:
 
 ## Performance Note
 
-The router performs a "pre-flight" call to the Chooser model, which is a **jev-compatible decider** endpoint (OpenAI-compatible, e.g. via an Ollama instance). It sends the query and the list of specialist topics as `criteria` and reads the `best_model` choice from the structured response — no free-text parsing required. For optimal performance, use a fast/lightweight model for the Chooser (e.g. GPT-4o-mini or a local small model).
+The router performs a "pre-flight" call to the Chooser model, which is a **jev-compatible decider** endpoint (OpenAI-compatible, e.g. via an Ollama instance). It sends the current query along with the recent conversation history as `context` and the list of specialist topics as `criteria`, and reads the `best_model` choice from the structured response — no free-text parsing required. The context is capped to the most recent messages to keep the call fast. For optimal performance, use a fast/lightweight model for the Chooser (e.g. GPT-4o-mini or a local small model).

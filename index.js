@@ -112,11 +112,36 @@ app.post('/v1/chat/completions', async (req, res) => {
     // 3. Activate Chooser Model (jev-compatible decider)
     let chosenSpecialistId = 'FALLBACK';
     try {
-        // Extract the last user message to use as the query for the decider
+        // Use the last message (the current turn) as the primary query for the decider.
+        // This represents the "current situation" we want a model best suited for.
         const lastMessage = messages[messages.length - 1];
         const content = typeof lastMessage.content === 'string'
             ? lastMessage.content
             : JSON.stringify(lastMessage.content);
+
+        // Build the conversation history (chat logs) as context so the decider can
+        // judge the CURRENT situation with full context, instead of routing based on
+        // the isolated last message. Without context, short context-dependent
+        // follow-ups (e.g. "continue", "why?") can cause the chooser to default to
+        // the first specialist it sees rather than the model best for the situation.
+        // Cap the history to keep the pre-flight call fast (see README performance note).
+        //
+        // IMPORTANT: the chooser endpoint is jev-compatible (NOT OpenAI), so an
+        // OpenAI-style "context" (an array of {role, content} messages) does not work —
+        // it ends up walking the messages one by one and over-weighting the FIRST
+        // message in the convo. Pass the history as a single plain-text transcript
+        // (the chat logs as context only). The current turn stays in "query".
+        const CHOOSER_CONTEXT_MAX_MESSAGES = 20;
+        const context = messages
+            .slice(0, -1)                          // history only; the current turn is "query"
+            .slice(-CHOOSER_CONTEXT_MAX_MESSAGES)
+            .map(m => {
+                const c = typeof m.content === 'string'
+                    ? m.content
+                    : JSON.stringify(m.content);
+                return `${m.role}: ${c}`;
+            })
+            .join('\n');
 
         // Build the criteria: each specialist ID mapped to its topic description
         const criteria = {};
@@ -128,12 +153,13 @@ app.post('/v1/chat/completions', async (req, res) => {
             model: sanitize(process.env.CHOOSER_MODEL_NAME),
             state: {
                 query: content,
-                task: 'Select the model best suited to respond to this query.'
+                context: context,
+                task: 'Select the model best suited to respond to the current situation. Use the conversation history in "context" to understand what the latest query is really about.'
             },
             questions: {
                 best_model: {
                     type: 'choice',
-                    instructions: 'Which best describes the model that would be best for this query?',
+                    instructions: 'Which best describes the model that would be best for the current situation, considering the full conversation context?',
                     criteria: criteria
                 }
             }
